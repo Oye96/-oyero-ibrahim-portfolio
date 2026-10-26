@@ -1,0 +1,18 @@
+create extension if not exists pgcrypto;
+create table if not exists public.admin_users(user_id uuid primary key references auth.users(id) on delete cascade,created_at timestamptz not null default now());
+create table if not exists public.projects(id uuid primary key default gen_random_uuid(),title text not null,category text not null check(category in('automation','video')),summary text not null,description text not null default '',cover_url text not null default '',media_urls text[] not null default '{}',project_url text,featured boolean not null default false,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table if not exists public.site_settings(id integer primary key check(id=1),email text not null default '',whatsapp text not null default '',linkedin text not null default '',instagram text not null default '',facebook text not null default '',tiktok text not null default '',youtube text not null default '',updated_at timestamptz not null default now());
+insert into public.site_settings(id) values(1) on conflict(id) do nothing;
+alter table public.admin_users enable row level security; alter table public.projects enable row level security; alter table public.site_settings enable row level security;
+create policy "Public read projects" on public.projects for select using(true);
+create policy "Admins insert projects" on public.projects for insert to authenticated with check(exists(select 1 from public.admin_users where user_id=auth.uid()));
+create policy "Admins update projects" on public.projects for update to authenticated using(exists(select 1 from public.admin_users where user_id=auth.uid())) with check(exists(select 1 from public.admin_users where user_id=auth.uid()));
+create policy "Admins delete projects" on public.projects for delete to authenticated using(exists(select 1 from public.admin_users where user_id=auth.uid()));
+create policy "Public read settings" on public.site_settings for select using(true);
+create policy "Admins manage settings" on public.site_settings for all to authenticated using(exists(select 1 from public.admin_users where user_id=auth.uid())) with check(exists(select 1 from public.admin_users where user_id=auth.uid()));
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('portfolio-media','portfolio-media',true,104857600,array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime']) on conflict(id) do update set public=true,file_size_limit=104857600;
+create policy "Public view portfolio media" on storage.objects for select using(bucket_id='portfolio-media');
+create policy "Admins upload portfolio media" on storage.objects for insert to authenticated with check(bucket_id='portfolio-media' and exists(select 1 from public.admin_users where user_id=auth.uid()));
+create policy "Admins update portfolio media" on storage.objects for update to authenticated using(bucket_id='portfolio-media' and exists(select 1 from public.admin_users where user_id=auth.uid())) with check(bucket_id='portfolio-media' and exists(select 1 from public.admin_users where user_id=auth.uid()));
+create policy "Admins delete portfolio media" on storage.objects for delete to authenticated using(bucket_id='portfolio-media' and exists(select 1 from public.admin_users where user_id=auth.uid()));
+-- After creating your Auth user, run: insert into public.admin_users(user_id) values('YOUR_AUTH_USER_UUID');
